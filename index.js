@@ -19,21 +19,44 @@ const client = new MongoClient(uri, {
     strict: true,
     deprecationErrors: true,
   },
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+  maxPoolSize: 10,
 });
 
 async function run() {
   try {
-    const classesCollection = client.db("musicalSchool").collection("classes");
+    const classesCollection = client
+      .db("musicalSchoolDB")
+      .collection("classes");
+    const userCollection = client.db("musicalSchoolDB").collection("user");
 
+    // users api
+    app.get("/all-users", async (req, res) => {
+      const result = await userCollection.find().toArray();
+      res.send(result);
+    });
+    app.post("/users", async (req, res) => {
+      const user = req.body;
+      const query = { email: user.email };
+      const exitingUser = await userCollection.findOne(query);
+      if (exitingUser) {
+        return res.send({ message: "User already exists" });
+      }
+      const result = await userCollection.insertOne(user);
+      res.send(result);
+    });
+    // get all classes
     app.get("/classes", async (req, res) => {
       const result = await classesCollection.find().toArray();
       res.send(result);
     });
+
     // Send a ping to confirm a successful connection
-    await client.db("admin").command({ ping: 1 });
-    console.log(
-      "Pinged your deployment. You successfully connected to MongoDB!"
-    );
+    // await client.db("admin").command({ ping: 1 });
+    // console.log(
+    //   "Pinged your deployment. You successfully connected to MongoDB!"
+    // );
   } finally {
     // Ensures that the client will close when you finish/error
     // await client.close();
