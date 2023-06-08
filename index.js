@@ -31,6 +31,15 @@ async function run() {
       .collection("classes");
     const userCollection = client.db("musicalSchoolDB").collection("user");
 
+    //  JWT
+    app.post("/jwt", (req, res) => {
+      const user = req.body;
+      const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {
+        expiresIn: "10 days",
+      });
+      res.send(token);
+    });
+
     // users api
     app.get("/all-users", async (req, res) => {
       const result = await userCollection.find().toArray();
