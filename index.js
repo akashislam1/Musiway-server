@@ -151,11 +151,26 @@ async function run() {
       const result = await classesCollection.find().toArray();
       res.send(result);
     });
+
     app.post("/add-classes", verifyJWT, verifyInstructor, async (req, res) => {
       const newClass = req.body;
       const result = await classesCollection.insertOne(newClass);
       res.send(result);
     });
+
+    app.patch("/approve-classes/:id", async (req, res) => {
+      const updateStatus = req.body;
+      const id = req.params.id;
+      const filter = { _id: new ObjectId(id) };
+      const updateDoc = {
+        $set: {
+          status: updateStatus.status,
+        },
+      };
+      const result = await classesCollection.updateOne(filter, updateDoc);
+      res.send(result);
+    });
+
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log(
