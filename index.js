@@ -126,13 +126,18 @@ async function run() {
     });
 
     //  Instructor api
-    app.get("/users/instructor/:email", async (req, res) => {
-      const email = req.params.email;
-      const query = { email: email };
-      const user = await userCollection.findOne(query);
-      const result = { admin: user?.role === "instructor" };
-      res.send(result);
-    });
+    app.get(
+      "/users/instructor/:email",
+      verifyJWT,
+      verifyInstructor,
+      async (req, res) => {
+        const email = req.params.email;
+        const query = { email: email };
+        const user = await userCollection.findOne(query);
+        const result = { instructor: user?.role === "instructor" };
+        res.send(result);
+      }
+    );
 
     app.patch("/users/instructor/:id", async (req, res) => {
       const id = req.params.id;
@@ -168,6 +173,13 @@ async function run() {
         },
       };
       const result = await classesCollection.updateOne(filter, updateDoc);
+      res.send(result);
+    });
+
+    app.delete("/delete-class/:id", async (req, res) => {
+      const id = req.params.id;
+      const filter = { _id: new ObjectId(id) };
+      const result = await classesCollection.deleteOne(filter);
       res.send(result);
     });
 
