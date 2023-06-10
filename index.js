@@ -4,6 +4,7 @@ const cors = require("cors");
 const jwt = require("jsonwebtoken");
 require("dotenv").config();
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
+const stripe = require("stripe")(process.env.PAYMENT_SECRET_KEY);
 const port = process.env.PORT || 5000;
 
 // middleware
@@ -51,6 +52,9 @@ async function run() {
       .db("musicalSchoolDB")
       .collection("classes");
     const userCollection = client.db("musicalSchoolDB").collection("user");
+    const userSelectedCollection = client
+      .db("musicalSchoolDB")
+      .collection("selectedClasses");
 
     // verify Admin
     const verifyAdmin = async (req, res, next) => {
@@ -60,7 +64,7 @@ async function run() {
       if (user?.role !== "admin") {
         return res
           .status(403)
-          .send({ error: true, message: "forbidden message" });
+          .send({ error: true, message: "forbidden access" });
       }
       next();
     };
@@ -73,7 +77,7 @@ async function run() {
       if (user?.role !== "instructor") {
         return res
           .status(403)
-          .send({ error: true, message: "forbidden message" });
+          .send({ error: true, message: "forbidden access" });
       }
       next();
     };
@@ -105,7 +109,7 @@ async function run() {
     });
 
     //  Admin Api
-    app.get("/users/admin/:email", verifyJWT, verifyAdmin, async (req, res) => {
+    app.get("/users/admin/:email", verifyJWT, async (req, res) => {
       const email = req.params.email;
       const query = { email: email };
       const user = await userCollection.findOne(query);
@@ -125,19 +129,47 @@ async function run() {
       res.send(result);
     });
 
+    // approve class
+    app.patch("/approve-classes/:id", async (req, res) => {
+      const updateStatus = req.body;
+      const id = req.params.id;
+      const filter = { _id: new ObjectId(id) };
+      const updateDoc = {
+        $set: {
+          status: updateStatus.status,
+        },
+      };
+      const result = await classesCollection.updateOne(filter, updateDoc);
+      res.send(result);
+    });
+
+    // deny classes
+    app.patch("/deny-class/:id", verifyJWT, verifyAdmin, async (req, res) => {
+      const id = req.params.id;
+      const filter = { _id: new ObjectId(id) };
+      const updateDoc = {
+        $set: {
+          status: "denied",
+        },
+      };
+      const result = await classesCollection.updateOne(filter, updateDoc);
+      res.send(result);
+    });
+
     //  Instructor api
-    app.get(
-      "/users/instructor/:email",
-      verifyJWT,
-      verifyInstructor,
-      async (req, res) => {
-        const email = req.params.email;
-        const query = { email: email };
-        const user = await userCollection.findOne(query);
-        const result = { instructor: user?.role === "instructor" };
-        res.send(result);
-      }
-    );
+    app.get("/users/instructor/:email", verifyJWT, async (req, res) => {
+      const email = req.params.email;
+      const query = { email: email };
+      const user = await userCollection.findOne(query);
+      const result = { instructor: user?.role === "instructor" };
+      res.send(result);
+    });
+
+    app.post("/add-classes", verifyJWT, verifyInstructor, async (req, res) => {
+      const newClass = req.body;
+      const result = await classesCollection.insertOne(newClass);
+      res.send(result);
+    });
 
     app.patch("/users/instructor/:id", async (req, res) => {
       const id = req.params.id;
@@ -157,30 +189,60 @@ async function run() {
       res.send(result);
     });
 
-    app.post("/add-classes", verifyJWT, verifyInstructor, async (req, res) => {
-      const newClass = req.body;
-      const result = await classesCollection.insertOne(newClass);
-      res.send(result);
-    });
-
-    app.patch("/approve-classes/:id", async (req, res) => {
-      const updateStatus = req.body;
-      const id = req.params.id;
-      const filter = { _id: new ObjectId(id) };
-      const updateDoc = {
-        $set: {
-          status: updateStatus.status,
-        },
+    // Sudent selected api
+    app.get("/users/student/:email", verifyJWT, async (req, res) => {
+      const email = req.params.email;
+      const query = { email: email };
+      const user = await userCollection.findOne(query);
+      const result = {
+        student: user.role != "admin" && user.role != "instructor",
       };
-      const result = await classesCollection.updateOne(filter, updateDoc);
       res.send(result);
     });
 
-    app.delete("/delete-class/:id", async (req, res) => {
+    app.get("/myClasses", verifyJWT, async (req, res) => {
+      const email = req.query.email;
+      if (!email) {
+        res.send([]);
+      }
+
+      const decodedEmail = req.decoded.email;
+      if (email !== decodedEmail) {
+        return res
+          .status(403)
+          .send({ error: true, message: "forbidden access" });
+      }
+
+      const query = { email: email };
+      const result = await userSelectedCollection.find(query).toArray();
+      res.send(result);
+    });
+
+    app.post("/selected-classes", async (req, res) => {
+      const selectClass = req.body;
+      const result = await userSelectedCollection.insertOne(selectClass);
+      res.send(result);
+    });
+
+    app.delete("/delete-my-class/:id", verifyJWT, async (req, res) => {
       const id = req.params.id;
       const filter = { _id: new ObjectId(id) };
-      const result = await classesCollection.deleteOne(filter);
+      const result = await userSelectedCollection.deleteOne(filter);
       res.send(result);
+    });
+
+    // create-payment-intent
+    app.post("/create-payment-intent", async (req, res) => {
+      const { price } = req.body;
+      const amount = price * 100;
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: amount,
+        currency: "usd",
+        payment_method_types: ["card"],
+      });
+      res.send({
+        clientSecret: paymentIntent.client_secret,
+      });
     });
 
     // Send a ping to confirm a successful connection
