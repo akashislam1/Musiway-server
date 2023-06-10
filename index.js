@@ -55,7 +55,9 @@ async function run() {
     const userSelectedCollection = client
       .db("musicalSchoolDB")
       .collection("selectedClasses");
-
+    const paymentCollection = client
+      .db("musicalSchoolDB")
+      .collection("payments");
     // verify Admin
     const verifyAdmin = async (req, res, next) => {
       const email = req.decoded.email;
@@ -232,7 +234,7 @@ async function run() {
     });
 
     // create-payment-intent
-    app.post("/create-payment-intent", async (req, res) => {
+    app.post("/create-payment-intent", verifyJWT, async (req, res) => {
       const { price } = req.body;
       const amount = price * 100;
       const paymentIntent = await stripe.paymentIntents.create({
@@ -243,6 +245,36 @@ async function run() {
       res.send({
         clientSecret: paymentIntent.client_secret,
       });
+    });
+
+    // payment related API's Here
+
+    app.post("/payments", verifyJWT, async (req, res) => {
+      try {
+        const payment = req.body;
+        const insertResult = await paymentCollection.insertOne(payment);
+
+        // update
+        const updateQuery = { _id: new ObjectId(payment.selectedClassId) };
+        const updatedSeat = { $inc: { availableSeats: -1 } };
+        const options = { upsert: true };
+        const updateResult = await classesCollection.updateOne(
+          updateQuery,
+          updatedSeat,
+          options
+        );
+        console.log("263", updateResult);
+
+        // delete
+        const deleteQuery = { _id: new ObjectId(payment.classId) };
+        const deleteResult = await userSelectedCollection.deleteOne(
+          deleteQuery
+        );
+        res.send({ insertResult, deleteResult, updateResult });
+      } catch (error) {
+        console.error("An error occurred:", error);
+        res.status(500).send("Internal server error");
+      }
     });
 
     // Send a ping to confirm a successful connection
