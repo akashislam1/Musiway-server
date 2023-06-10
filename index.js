@@ -233,6 +233,16 @@ async function run() {
       res.send(result);
     });
 
+    app.get("/enrolled-class", verifyJWT, async (req, res) => {
+      const email = req.query.email;
+      const query = { email: email };
+      const result = await paymentCollection
+        .find(query)
+        .sort({ date: -1 })
+        .toArray();
+      res.send(result);
+    });
+
     // create-payment-intent
     app.post("/create-payment-intent", verifyJWT, async (req, res) => {
       const { price } = req.body;
