@@ -131,6 +131,18 @@ async function run() {
       res.send(result);
     });
 
+    app.patch("/users/instructor/:id", async (req, res) => {
+      const id = req.params.id;
+      const filter = { _id: new ObjectId(id) };
+      const updateDoc = {
+        $set: {
+          role: "instructor",
+        },
+      };
+      const result = await userCollection.updateOne(filter, updateDoc);
+      res.send(result);
+    });
+
     // approve class
     app.patch("/approve-classes/:id", async (req, res) => {
       const updateStatus = req.body;
@@ -158,6 +170,8 @@ async function run() {
       res.send(result);
     });
 
+    //  admin api endpoint
+
     //  Instructor api
     app.get("/users/instructor/:email", verifyJWT, async (req, res) => {
       const email = req.params.email;
@@ -172,18 +186,27 @@ async function run() {
       const result = await classesCollection.insertOne(newClass);
       res.send(result);
     });
-
-    app.patch("/users/instructor/:id", async (req, res) => {
-      const id = req.params.id;
-      const filter = { _id: new ObjectId(id) };
-      const updateDoc = {
-        $set: {
-          role: "instructor",
-        },
-      };
-      const result = await userCollection.updateOne(filter, updateDoc);
-      res.send(result);
-    });
+    // update classes api
+    app.put(
+      "/update-class/:id",
+      verifyJWT,
+      verifyInstructor,
+      async (req, res) => {
+        const id = req.params.id;
+        const body = req.body;
+        const filter = { _id: new ObjectId(id) };
+        const updateDoc = {
+          $set: {
+            title: body.title,
+            availableSeats: parseInt(body.availableSeats),
+            price: parseInt(body.price),
+            status: "pending",
+          },
+        };
+        const result = await classesCollection.updateOne(filter, updateDoc);
+        res.send(result);
+      }
+    );
 
     // get all classes
     app.get("/classes", async (req, res) => {
@@ -260,38 +283,30 @@ async function run() {
     // payment related API's Here
 
     app.post("/payments", verifyJWT, async (req, res) => {
-      try {
-        const payment = req.body;
-        const insertResult = await paymentCollection.insertOne(payment);
+      const payment = req.body;
+      const insertResult = await paymentCollection.insertOne(payment);
 
-        // update
-        const updateQuery = { _id: new ObjectId(payment.selectedClassId) };
-        const updatedSeat = { $inc: { availableSeats: -1 } };
-        const options = { upsert: true };
-        const updateResult = await classesCollection.updateOne(
-          updateQuery,
-          updatedSeat,
-          options
-        );
-        console.log("263", updateResult);
+      // update
+      const updateQuery = { _id: new ObjectId(payment.selectedClassId) };
+      const updatedSeat = { $inc: { availableSeats: -1 } };
+      const options = { upsert: true };
+      const updateResult = await classesCollection.updateOne(
+        updateQuery,
+        updatedSeat,
+        options
+      );
 
-        // delete
-        const deleteQuery = { _id: new ObjectId(payment.classId) };
-        const deleteResult = await userSelectedCollection.deleteOne(
-          deleteQuery
-        );
-        res.send({ insertResult, deleteResult, updateResult });
-      } catch (error) {
-        console.error("An error occurred:", error);
-        res.status(500).send("Internal server error");
-      }
+      // delete
+      const deleteQuery = { _id: new ObjectId(payment.classId) };
+      const deleteResult = await userSelectedCollection.deleteOne(deleteQuery);
+      res.send({ insertResult, deleteResult, updateResult });
     });
 
     // Send a ping to confirm a successful connection
-    await client.db("admin").command({ ping: 1 });
-    console.log(
-      "Pinged your deployment. You successfully connected to MongoDB!"
-    );
+    // await client.db("admin").command({ ping: 1 });
+    // console.log(
+    //   "Pinged your deployment. You successfully connected to MongoDB!"
+    // );
   } finally {
     // Ensures that the client will close when you finish/error
     // await client.close();
