@@ -48,6 +48,7 @@ const client = new MongoClient(uri, {
 
 async function run() {
   try {
+    /* Collections */
     const classesCollection = client
       .db("musicalSchoolDB")
       .collection("classes");
@@ -58,7 +59,11 @@ async function run() {
     const paymentCollection = client
       .db("musicalSchoolDB")
       .collection("payments");
-    // verify Admin
+    const feedbackCollection = client
+      .db("musicalSchoolDB")
+      .collection("feedbacks");
+
+    /*  verify Admin */
     const verifyAdmin = async (req, res, next) => {
       const email = req.decoded.email;
       const query = { email: email };
@@ -93,6 +98,12 @@ async function run() {
       res.send(token);
     });
 
+    // get all classes
+    app.get("/classes", async (req, res) => {
+      const result = await classesCollection.find().toArray();
+      res.send(result);
+    });
+
     // users api
     app.get("/all-users", verifyJWT, verifyAdmin, async (req, res) => {
       const result = await userCollection.find().toArray();
@@ -116,6 +127,12 @@ async function run() {
       const query = { email: email };
       const user = await userCollection.findOne(query);
       const result = { admin: user?.role === "admin" };
+      res.send(result);
+    });
+
+    app.post("/feedback", verifyJWT, async (req, res) => {
+      const feedback = req.body;
+      const result = await feedbackCollection.insertOne(feedback);
       res.send(result);
     });
 
@@ -181,6 +198,13 @@ async function run() {
       res.send(result);
     });
 
+    app.get("/feedback/:email", verifyJWT, async (req, res) => {
+      const email = req.params.email;
+      const query = { email: email };
+      const feedback = await feedbackCollection.find(query).toArray();
+      res.send(feedback);
+    });
+
     app.post("/add-classes", verifyJWT, verifyInstructor, async (req, res) => {
       const newClass = req.body;
       const result = await classesCollection.insertOne(newClass);
@@ -207,12 +231,6 @@ async function run() {
         res.send(result);
       }
     );
-
-    // get all classes
-    app.get("/classes", async (req, res) => {
-      const result = await classesCollection.find().toArray();
-      res.send(result);
-    });
 
     // Sudent selected api
     app.get("/users/student/:email", verifyJWT, async (req, res) => {
